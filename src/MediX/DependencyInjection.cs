@@ -36,8 +36,11 @@ public static class DependencyInjection
         params Assembly[] assemblies)
     {
         services.AddScoped<IMediator, Mediator>();
+        services.TryAddSingleton<INotificationPublisher, SequentialStopOnFirstExceptionPublisher>();
 
         var handlerInterface = typeof(IRequestHandler<,>);
+        var notificationHandlerInterface = typeof(INotificationHandler<>);
+
         foreach (var assembly in assemblies)
         {
             foreach (var type in assembly.GetTypes())
@@ -49,14 +52,62 @@ public static class DependencyInjection
 
                 foreach (var contract in type.GetInterfaces())
                 {
-                    if (contract.IsGenericType
-                        && contract.GetGenericTypeDefinition() == handlerInterface)
+                    if (!contract.IsGenericType)
+                    {
+                        continue;
+                    }
+
+                    var definition = contract.GetGenericTypeDefinition();
+                    if (definition == handlerInterface || definition == notificationHandlerInterface)
                     {
                         services.AddScoped(contract, type);
                     }
                 }
             }
         }
+
+        return services;
+    }
+
+    /// <summary>
+    /// Troca a estratégia de publish para <see cref="SequentialStopOnFirstExceptionPublisher"/>
+    /// (o padrão já registrado por <see cref="AddMediX"/> — use este método apenas para reverter
+    /// uma troca anterior de forma explícita).
+    /// </summary>
+    /// <param name="services">Coleção de serviços onde a troca é feita.</param>
+    public static IServiceCollection UseSequentialNotificationPublisher(
+        this IServiceCollection services)
+    {
+        services.Replace(
+            ServiceDescriptor.Singleton<INotificationPublisher, SequentialStopOnFirstExceptionPublisher>());
+
+        return services;
+    }
+
+    /// <summary>
+    /// Troca a estratégia de publish para <see cref="SequentialContinueOnExceptionPublisher"/> —
+    /// todos os handlers rodam mesmo que algum falhe, com as falhas agregadas ao final.
+    /// </summary>
+    /// <param name="services">Coleção de serviços onde a troca é feita.</param>
+    public static IServiceCollection UseSequentialContinueOnExceptionNotificationPublisher(
+        this IServiceCollection services)
+    {
+        services.Replace(
+            ServiceDescriptor.Singleton<INotificationPublisher, SequentialContinueOnExceptionPublisher>());
+
+        return services;
+    }
+
+    /// <summary>
+    /// Troca a estratégia de publish para <see cref="ParallelWhenAllPublisher"/> — todos os
+    /// handlers rodam em paralelo.
+    /// </summary>
+    /// <param name="services">Coleção de serviços onde a troca é feita.</param>
+    public static IServiceCollection UseParallelNotificationPublisher(
+        this IServiceCollection services)
+    {
+        services.Replace(
+            ServiceDescriptor.Singleton<INotificationPublisher, ParallelWhenAllPublisher>());
 
         return services;
     }

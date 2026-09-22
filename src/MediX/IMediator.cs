@@ -14,4 +14,19 @@ public interface IMediator
     Task<TResponse> SendAsync<TResponse>(
         IRequest<TResponse> request,
         CancellationToken cancellationToken);
+
+    /// <summary>
+    /// Publica <paramref name="notification"/> para todos os
+    /// <see cref="INotificationHandler{TNotification}"/> registrados, executados conforme a
+    /// estratégia de <see cref="INotificationPublisher"/> configurada (padrão: sequencial,
+    /// parando no primeiro erro). Notificações não passam pela pipeline de
+    /// <see cref="IPipelineBehavior{TRequest,TResponse}"/>.
+    /// </summary>
+    /// <typeparam name="TNotification">Tipo da notificação publicada.</typeparam>
+    /// <param name="notification">Notificação a ser publicada.</param>
+    /// <param name="cancellationToken">Token de cancelamento da operação.</param>
+    Task PublishAsync<TNotification>(
+        TNotification notification,
+        CancellationToken cancellationToken)
+        where TNotification : INotification;
 }

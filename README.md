@@ -15,8 +15,13 @@ dotnet add package MediX
 - `ICommand<TResponse>` — requisição que muta estado.
 - `IQuery<TResponse>` — requisição que apenas lê estado.
 - `IRequestHandler<TRequest, TResponse>` — `Task<TResponse> HandleAsync(TRequest, CancellationToken)`.
-- `IMediator` — `Task<TResponse> SendAsync<TResponse>(IRequest<TResponse>, CancellationToken)`.
+- `IMediator` — `SendAsync<TResponse>(IRequest<TResponse>, CancellationToken)` e
+  `PublishAsync<TNotification>(TNotification, CancellationToken)`.
 - `IPipelineBehavior<TRequest, TResponse>` — intercepta o envio de um request antes/depois do handler.
+- `INotification` — marcador para uma notificação publicada via `PublishAsync`.
+- `INotificationHandler<TNotification>` — `Task HandleAsync(TNotification, CancellationToken)`;
+  vários podem existir para o mesmo tipo de notificação.
+- `INotificationPublisher` — estratégia plugável de execução dos handlers de uma notificação.
 
 ## Padrão de uso
 
@@ -73,10 +78,52 @@ Habilite o pipeline behavior correspondente:
 services.AddConcurrencySerialization();
 ```
 
-## Escopo atual
+## Notificações / pub-sub (opcional)
 
-MediX cobre hoje apenas o padrão request/response (comandos e queries). Não há suporte a
-notificações/pub-sub (`INotification`/`INotificationHandler`, como no MediatR).
+Além do request/response, o MediX suporta publish/subscribe: uma notificação pode ter zero, um ou
+vários handlers, todos executados — sem retorno.
+
+```csharp
+public sealed record OrderCreatedNotification(Guid OrderId) : INotification;
+
+internal sealed class SendConfirmationEmailHandler : INotificationHandler<OrderCreatedNotification>
+{
+    public Task HandleAsync(OrderCreatedNotification notification, CancellationToken cancellationToken)
+    {
+        // ...
+        return Task.CompletedTask;
+    }
+}
+```
+
+Handlers (`INotificationHandler<TNotification>`) são descobertos pelo mesmo `AddMediX(...)` usado
+para `IRequestHandler<,>`, incluindo tipos `internal`. Publique com:
+
+```csharp
+await mediator.PublishAsync(new OrderCreatedNotification(orderId), cancellationToken);
+```
+
+Notificações não passam pela pipeline de `IPipelineBehavior<,>` — isso é exclusivo de
+request/response.
+
+### Estratégia de execução dos handlers
+
+Como os handlers de uma notificação são executados é definido por uma implementação de
+`INotificationPublisher`, registrada via DI e trocável pelo consumidor. `AddMediX` já registra o
+padrão (`SequentialStopOnFirstExceptionPublisher`); troque com um dos métodos de extensão:
+
+| Método | Execução | Se um handler falhar |
+|---|---|---|
+| _(padrão, sem chamar nada)_ | Sequencial, na ordem de registro | Para imediatamente; handlers seguintes não rodam |
+| `UseSequentialContinueOnExceptionNotificationPublisher()` | Sequencial, na ordem de registro | Todos rodam; falhas são agregadas numa `AggregateException` ao final |
+| `UseParallelNotificationPublisher()` | Todos em paralelo | Todos rodam; falhas são agregadas numa `AggregateException` |
+
+```csharp
+services.AddMediX(typeof(DependencyInjection).Assembly);
+services.UseParallelNotificationPublisher(); // opcional
+```
+
+Você também pode implementar `INotificationPublisher` do zero e registrar sua própria estratégia.
 
 ## Licença
 

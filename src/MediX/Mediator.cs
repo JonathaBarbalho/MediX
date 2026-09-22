@@ -66,4 +66,17 @@ internal sealed class Mediator(
 
         return pipeline();
     }
+
+    public Task PublishAsync<TNotification>(
+        TNotification notification,
+        CancellationToken cancellationToken)
+        where TNotification : INotification
+    {
+        ArgumentNullException.ThrowIfNull(notification);
+
+        var handlers = serviceProvider.GetServices<INotificationHandler<TNotification>>().ToList();
+        var publisher = serviceProvider.GetRequiredService<INotificationPublisher>();
+
+        return publisher.PublishAsync(handlers, notification, cancellationToken);
+    }
 }
