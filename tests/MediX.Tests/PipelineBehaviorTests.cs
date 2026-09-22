@@ -59,6 +59,22 @@ public sealed class PipelineBehaviorTests
             log);
     }
 
+    [Fact]
+    public async Task SendAsync_WhenBehaviorInvokeReturnsNull_ThrowsInvalidOperationException()
+    {
+        var provider = BuildProvider(services =>
+        {
+            services.AddScoped(typeof(IPipelineBehavior<,>), typeof(NullReturningBehavior<,>));
+        });
+        var mediator = provider.GetRequiredService<IMediator>();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => mediator.SendAsync(new Ping("hi"), CancellationToken.None));
+
+        Assert.Contains(nameof(Ping), exception.Message);
+        Assert.Contains("Behavior inválido", exception.Message);
+    }
+
     private static ServiceProvider BuildProvider(
         Action<IServiceCollection>? configure = null)
     {
@@ -140,5 +156,15 @@ public sealed class PipelineBehaviorTests
 
             return next();
         }
+    }
+
+    public sealed class NullReturningBehavior<TRequest, TResponse> : IPipelineBehavior<TRequest, TResponse>
+        where TRequest : IRequest<TResponse>
+    {
+        public Task<TResponse> HandleAsync(
+            TRequest request,
+            RequestHandlerDelegate<TResponse> next,
+            CancellationToken cancellationToken)
+            => null!;
     }
 }

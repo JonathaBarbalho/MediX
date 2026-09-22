@@ -125,6 +125,44 @@ public sealed class NotificationPublisherTests
         Assert.Equal(2, ex.InnerExceptions.Count);
     }
 
+    [Fact]
+    public async Task Parallel_WhenOnlyCanceled_PropagatesAsPureCancellation()
+    {
+        // Documents that pure cancellation (no real fault among the tasks) is NOT wrapped in
+        // AggregateException: `catch (Exception) when (tasks.Any(t => t.IsFaulted))` does not
+        // match because no task is Faulted, so the TaskCanceledException raised by
+        // `await Task.WhenAll` propagates untouched.
+        INotificationHandler<PingNotification>[] handlers =
+        [
+            new CanceledHandler()
+        ];
+
+        await Assert.ThrowsAsync<TaskCanceledException>(
+            () => new ParallelWhenAllPublisher().PublishAsync(
+                handlers, new PingNotification("hi"), CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Parallel_WhenCanceledMixedWithRealFailure_AggregatesOnlyTheRealFailure()
+    {
+        // Documents that when a real fault coexists with a canceled task, Task.WhenAll surfaces
+        // the Faulted status (Faulted takes priority over Canceled), the exception filter
+        // matches, and the AggregateException aggregates only the IsFaulted tasks — the canceled
+        // task has no `.Exception` to contribute and is excluded from the aggregation.
+        INotificationHandler<PingNotification>[] handlers =
+        [
+            new CanceledHandler(),
+            new ThrowingHandler(new InvalidOperationException("real-boom"))
+        ];
+
+        var ex = await Assert.ThrowsAsync<AggregateException>(
+            () => new ParallelWhenAllPublisher().PublishAsync(
+                handlers, new PingNotification("hi"), CancellationToken.None));
+
+        var inner = Assert.Single(ex.InnerExceptions);
+        Assert.Equal("real-boom", inner.Message);
+    }
+
     public sealed record PingNotification(string Value) : INotification;
 
     private sealed class RecordingHandler(List<string> log, string name) : INotificationHandler<PingNotification>
@@ -146,6 +184,12 @@ public sealed class NotificationPublisherTests
     {
         public Task HandleAsync(PingNotification notification, CancellationToken cancellationToken)
             => gate.RunAsync();
+    }
+
+    private sealed class CanceledHandler : INotificationHandler<PingNotification>
+    {
+        public Task HandleAsync(PingNotification notification, CancellationToken cancellationToken)
+            => Task.FromCanceled(new CancellationToken(canceled: true));
     }
 
     private sealed class ConcurrencyGate

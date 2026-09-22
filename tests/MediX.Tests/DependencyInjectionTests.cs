@@ -53,14 +53,44 @@ public sealed class DependencyInjectionTests
         Assert.Single(behaviors);
     }
 
+    [Fact]
+    public async Task AddMediX_SkipsAbstractTypes_AndRegistersOnlyConcreteImplementation()
+    {
+        var services = new ServiceCollection();
+        services.AddMediX(typeof(DependencyInjectionTests).Assembly);
+        var provider = services.BuildServiceProvider();
+
+        var handlers = provider.GetServices<IRequestHandler<AbstractHandledPing, string>>().ToArray();
+        var handler = Assert.Single(handlers);
+        Assert.IsType<ConcreteAbstractPingHandler>(handler);
+
+        var mediator = provider.GetRequiredService<IMediator>();
+        var result = await mediator.SendAsync(new AbstractHandledPing("hi"), CancellationToken.None);
+
+        Assert.Equal("handled-concrete:hi", result);
+    }
+
     public sealed record InternalPing(string Value) : IRequest<string>;
 
     public sealed record MultiAssemblyPing(string Value) : IRequest<string>;
+
+    public sealed record AbstractHandledPing(string Value) : IRequest<string>;
 
     public sealed class MultiAssemblyPingHandler : IRequestHandler<MultiAssemblyPing, string>
     {
         public Task<string> HandleAsync(MultiAssemblyPing request, CancellationToken cancellationToken)
             => Task.FromResult($"handled-multi:{request.Value}");
+    }
+
+    public abstract class AbstractPingHandlerBase : IRequestHandler<AbstractHandledPing, string>
+    {
+        public abstract Task<string> HandleAsync(AbstractHandledPing request, CancellationToken cancellationToken);
+    }
+
+    public sealed class ConcreteAbstractPingHandler : AbstractPingHandlerBase
+    {
+        public override Task<string> HandleAsync(AbstractHandledPing request, CancellationToken cancellationToken)
+            => Task.FromResult($"handled-concrete:{request.Value}");
     }
 }
 

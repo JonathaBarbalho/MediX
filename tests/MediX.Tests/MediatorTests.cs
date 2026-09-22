@@ -27,6 +27,19 @@ public sealed class MediatorTests
         Assert.Contains(nameof(UnhandledPing), exception.Message);
     }
 
+    [Fact]
+    public async Task SendAsync_WhenHandlerInvokeReturnsNull_ThrowsInvalidOperationException()
+    {
+        var provider = BuildProvider();
+        var mediator = provider.GetRequiredService<IMediator>();
+
+        var exception = await Assert.ThrowsAsync<InvalidOperationException>(
+            () => mediator.SendAsync(new NullReturningPing("hi"), CancellationToken.None));
+
+        Assert.Contains(nameof(NullReturningPing), exception.Message);
+        Assert.Contains("Handler inválido", exception.Message);
+    }
+
     private static ServiceProvider BuildProvider()
     {
         var services = new ServiceCollection();
@@ -36,4 +49,12 @@ public sealed class MediatorTests
     }
 
     public sealed record UnhandledPing(string Value) : IRequest<string>;
+
+    public sealed record NullReturningPing(string Value) : IRequest<string>;
+
+    public sealed class NullReturningPingHandler : IRequestHandler<NullReturningPing, string>
+    {
+        public Task<string> HandleAsync(NullReturningPing request, CancellationToken cancellationToken)
+            => null!;
+    }
 }

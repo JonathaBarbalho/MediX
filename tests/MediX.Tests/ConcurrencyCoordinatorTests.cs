@@ -38,6 +38,48 @@ public sealed class ConcurrencyCoordinatorTests
                 cts.Token));
     }
 
+    [Fact]
+    public async Task ExecuteAsync_WhenCanceledWhileWaitingForSemaphore_ThrowsWithoutBlockingOtherCallers()
+    {
+        var coordinator = new ConcurrencyCoordinator(NullLogger<ConcurrencyCoordinator>.Instance);
+        var aEntered = new TaskCompletionSource();
+        var releaseA = new TaskCompletionSource();
+
+        var callA = coordinator.ExecuteAsync(
+            "key",
+            (Func<CancellationToken, Task<string>>)(async _ =>
+            {
+                aEntered.SetResult();
+                await releaseA.Task;
+                return "a";
+            }),
+            CancellationToken.None);
+
+        await aEntered.Task;
+
+        using var cts = new CancellationTokenSource();
+        var callB = coordinator.ExecuteAsync(
+            "key",
+            (Func<CancellationToken, Task<string>>)(_ => Task.FromResult("b")),
+            cts.Token);
+
+        // Give B time to actually reach and block on the semaphore (held by A) before canceling
+        // it, so the cancellation is observed while waiting — not before the call starts.
+        await Task.Delay(50);
+        cts.Cancel();
+
+        await Assert.ThrowsAnyAsync<OperationCanceledException>(() => callB);
+
+        releaseA.SetResult();
+        Assert.Equal("a", await callA);
+
+        var resultC = await coordinator.ExecuteAsync(
+            "key",
+            (Func<CancellationToken, Task<string>>)(_ => Task.FromResult("c")),
+            CancellationToken.None);
+        Assert.Equal("c", resultC);
+    }
+
     private sealed class RecordingLogger<T> : ILogger<T>
     {
         public List<(LogLevel Level, Exception? Exception, string Message)> Entries { get; } = new();
