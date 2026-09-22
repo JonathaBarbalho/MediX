@@ -3,6 +3,12 @@
 Mediador CQRS leve para .NET — implementação caseira, sem dependência do MediatR, com resolução
 de handlers via `IServiceProvider` e suporte a pipeline behaviors.
 
+## Instalação
+
+```
+dotnet add package MediX
+```
+
 ## Abstrações
 
 - `IRequest<TResponse>` — marcador comum para comandos e queries.
@@ -71,3 +77,7 @@ services.AddConcurrencySerialization();
 
 MediX cobre hoje apenas o padrão request/response (comandos e queries). Não há suporte a
 notificações/pub-sub (`INotification`/`INotificationHandler`, como no MediatR).
+
+## Licença
+
+MIT — veja [LICENSE](LICENSE).

@@ -8,6 +8,7 @@ public sealed class ConcurrencySerializationBehavior<TRequest, TResponse>(
     ConcurrencyCoordinator coordinator) : IPipelineBehavior<TRequest, TResponse>
     where TRequest : IRequest<TResponse>
 {
+    /// <inheritdoc/>
     public Task<TResponse> HandleAsync(
         TRequest request,
         RequestHandlerDelegate<TResponse> next,

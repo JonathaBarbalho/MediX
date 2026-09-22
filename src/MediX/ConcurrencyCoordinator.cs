@@ -11,6 +11,14 @@ public sealed class ConcurrencyCoordinator(ILogger<ConcurrencyCoordinator> logge
 {
     private readonly ConcurrentDictionary<string, SemaphoreSlim> _locks = new();
 
+    /// <summary>
+    /// Executa <paramref name="action"/> sob o semáforo associado a <paramref name="key"/>,
+    /// aguardando se outra execução com a mesma chave estiver em andamento.
+    /// </summary>
+    /// <typeparam name="T">Tipo do resultado produzido por <paramref name="action"/>.</typeparam>
+    /// <param name="key">Chave que identifica o escopo de serialização.</param>
+    /// <param name="action">Ação a ser executada de forma serializada.</param>
+    /// <param name="cancellationToken">Token de cancelamento da operação.</param>
     public async Task<T> ExecuteAsync<T>(
         string key,
         Func<CancellationToken, Task<T>> action,
