@@ -38,6 +38,21 @@ public sealed class ConcurrencySerializationBehaviorTests
     }
 
     [Fact]
+    public async Task SendAsync_WithSameConcurrencyKey_AcrossDifferentRequestTypes_SerializesExecution()
+    {
+        var provider = BuildProvider();
+        var mediator = provider.GetRequiredService<IMediator>();
+        var gate = new ConcurrencyGate();
+
+        var first = mediator.SendAsync(new ScopedPing("shared-key", gate), CancellationToken.None);
+        var second = mediator.SendAsync(new OtherScopedPing("shared-key", gate), CancellationToken.None);
+
+        await Task.WhenAll(first, second);
+
+        Assert.Equal(1, gate.MaxConcurrent);
+    }
+
+    [Fact]
     public async Task SendAsync_WithoutConcurrencyScope_StillInvokesHandler()
     {
         var provider = BuildProvider();
@@ -110,6 +125,17 @@ public sealed class ConcurrencySerializationBehaviorTests
     public sealed class ScopedPingHandler : IRequestHandler<ScopedPing, string>
     {
         public Task<string> HandleAsync(ScopedPing request, CancellationToken cancellationToken)
+            => request.Gate.RunAsync(request.Key);
+    }
+
+    public sealed record OtherScopedPing(string Key, ConcurrencyGate Gate) : IRequest<string>, IConcurrencyScoped
+    {
+        public string ConcurrencyKey => Key;
+    }
+
+    public sealed class OtherScopedPingHandler : IRequestHandler<OtherScopedPing, string>
+    {
+        public Task<string> HandleAsync(OtherScopedPing request, CancellationToken cancellationToken)
             => request.Gate.RunAsync(request.Key);
     }
 
